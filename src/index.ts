@@ -79,11 +79,14 @@ export class SandboxRunner {
     const script = new vm.Script(code);
     script.runInContext(sandboxContext, { timeout: options.timeoutMs ?? 1000 });
 
-    const exported = moduleShim.exports as {
-      default?: ExtensionFactory;
-    } & ExtensionFactory;
+    // The sandbox writes an arbitrary value onto module.exports, so widen
+    // through `unknown` before narrowing: it may be the factory itself (CommonJS
+    // `module.exports = fn`) or a namespace with a `default` (ESM interop).
+    const exported: unknown = moduleShim.exports;
     const factory: ExtensionFactory | undefined =
-      typeof exported === "function" ? exported : exported?.default;
+      typeof exported === "function"
+        ? (exported as ExtensionFactory)
+        : (exported as { default?: ExtensionFactory } | null)?.default;
 
     if (typeof factory !== "function") {
       throw new Error(
