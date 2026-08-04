@@ -1,0 +1,12 @@
+{
+  "name": "@unerp/sandbox",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@unerp/extension-api": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc"
+  }
+}
