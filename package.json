@@ -4,7 +4,6 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@unerp/extension-api": "workspace:*",
     "isolated-vm": "^7.0.0"
   },
   "scripts": {
@@ -15,7 +14,11 @@
   },
   "devDependencies": {
     "vitest": "^2.1.0",
-    "typescript": "^5.7.0",
-    "@unerp/config": "workspace:*"
-  }
+    "typescript": "^5.7.0"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ]
 }
