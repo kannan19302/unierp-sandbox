@@ -1,6 +1,9 @@
 # unierp-sandbox
 
-**Layer L2 — Runtime** of the [UniERP](../unierp-platform) platform.
+> Part of **[UniERP](https://github.com/kannan19302/UniERP)** — an open-source, self-hostable multi-tenant application platform.
+> [Repository map](https://github.com/kannan19302/UniERP#repository-map) · [Architecture](https://github.com/kannan19302/UniERP#how-the-pieces-fit-at-runtime) · [Contributing](https://github.com/kannan19302/UniERP/blob/main/CONTRIBUTING.md) · [Security](https://github.com/kannan19302/UniERP/blob/main/SECURITY.md)
+
+**Layer L2 — Runtime** of the [UniERP](https://github.com/kannan19302/unierp-platform) platform.
 Depends on: L0, L2.
 
 ## What this is
@@ -18,8 +21,8 @@ layer** — never sideways within a layer, never upward. A cycle is not
 discouraged; it is unrepresentable, because the lower layer's package cannot
 name the higher one.
 
-See the [platform overview](../unierp-platform/README.md) for the full map, and
-[`PLATFORM_ARCHITECTURE.md`](../ERPSys/docs/PLATFORM_ARCHITECTURE.md) § 4.2 for
+See the [platform overview](https://github.com/kannan19302/unierp-platform) for the full map, and
+[`PLATFORM_ARCHITECTURE.md`](https://github.com/kannan19302/unierp-workspace) § 4.2 for
 the reasoning.
 
 ## Licence
