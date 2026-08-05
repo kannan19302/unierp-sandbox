@@ -10,6 +10,13 @@
     "src"
   ],
   "exclude": [
-    "src/**/*.spec.ts"
+    "node_modules",
+    "dist",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.stories.tsx",
+    "**/__tests__/**"
   ]
 }

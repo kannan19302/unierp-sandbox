@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  static:
+    name: Static
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+
+      # The layer rule, asserted rather than assumed. See scripts/check-layer.mjs.
+      - name: Layering
+        run: node scripts/check-layer.mjs
+        if: hashFiles('scripts/check-layer.mjs') != ''
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+        if: hashFiles('tsconfig.json') != ''
