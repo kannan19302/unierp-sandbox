@@ -4,9 +4,18 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@unerp/extension-api": "workspace:*"
+    "@unerp/extension-api": "workspace:*",
+    "isolated-vm": "^7.0.0"
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0",
+    "typescript": "^5.7.0",
+    "@unerp/config": "workspace:*"
   }
 }
