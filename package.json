@@ -1,10 +1,10 @@
 {
   "name": "@unerp/sandbox",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@unerp/extension-api": "^1.0.1",
+    "@unerp/extension-api": "^1.0.6",
     "isolated-vm": "^7.0.0"
   },
   "scripts": {
@@ -16,7 +16,7 @@
   "devDependencies": {
     "vitest": "^2.1.0",
     "typescript": "^5.7.0",
-    "@unerp/config": "^1.0.1",
+    "@unerp/config": "^1.0.2",
     "@types/node": "^22.0.0"
   },
   "files": [
