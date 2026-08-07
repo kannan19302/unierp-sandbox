@@ -6,8 +6,8 @@ instructions cannot drift between vendors.
 
 ```bash
 # from a unierp-workspace checkout
-node scripts/phase-brief.mjs --ready      # what can be started right now
-node scripts/phase-brief.mjs <PHASE_ID>   # a complete, self-contained work order
+node scripts/start.mjs        # picks the next phase, claims it, prints the work order
+node scripts/start.mjs --who  # what other agents are holding right now
 ```
 
 **No claim without a mechanism that can fail.**
