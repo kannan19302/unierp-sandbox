@@ -1,0 +1,31 @@
+# Publish @unerp/sandbox to the public npm registry.
+#
+# This file declares WHICH gate applies. It deliberately contains no publish logic —
+# that lives once, in unierp-workspace/.github/workflows/publish-library.yml, which is
+# the invariant unierp-workspace's README claims to own and which D019 found was true of
+# nothing in this family. Do not inline steps here; change the reusable workflow.
+#
+# Triggered by a version tag. The reusable workflow refuses to republish a version that
+# is already on the registry, so re-running a tag is safe.
+name: Publish
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Pack and inspect without publishing.
+        type: boolean
+        default: true
+
+jobs:
+  publish:
+    uses: kannan19302/unierp-workspace/.github/workflows/publish-library.yml@main
+    permissions:
+      contents: read
+      # OIDC is not inherited by a called workflow — it must be granted here, or npm
+      # trusted publishing fails with an auth error that reads like a missing secret.
+      id-token: write
+    with:
+      dry-run: ${{ inputs.dry-run == true }}
