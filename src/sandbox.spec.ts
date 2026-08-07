@@ -38,7 +38,7 @@ describe("SandboxRunner — isolation", () => {
     expect(result).toBe(42);
   });
 
-  it("denies the node:vm escape that the previous implementation allowed", async () => {
+  it("T01 — denies the node:vm escape that the previous implementation allowed", async () => {
     // This exact expression walks out of a node:vm context to the host process.
     // In an isolate `process` does not exist at all.
     await expect(
@@ -51,7 +51,7 @@ describe("SandboxRunner — isolation", () => {
     ).rejects.toThrow();
   });
 
-  it("has no require, no fetch, no process and no host globals", async () => {
+  it("T02 — has no require, no fetch, no process and no host globals", async () => {
     const { result } = await runner.run(
       `const hooks = { probe: () => [
          typeof require, typeof process, typeof fetch, typeof globalThis.Buffer, typeof setTimeout
@@ -69,7 +69,7 @@ describe("SandboxRunner — isolation", () => {
     ]);
   });
 
-  it("enforces a wall-clock deadline on a runaway loop", async () => {
+  it("T08a — enforces a wall-clock deadline on a runaway loop", async () => {
     await expect(
       runner.run(
         `const hooks = { spin: () => { while (true) {} } };`,
@@ -80,7 +80,7 @@ describe("SandboxRunner — isolation", () => {
     ).rejects.toThrow(/timed out/i);
   });
 
-  it("enforces the isolate memory cap", async () => {
+  it("T04 — enforces the isolate memory cap", async () => {
     await expect(
       runner.run(
         `const hooks = { hog: () => { const a = []; while (true) a.push(new Array(1e6).fill(7)); } };`,
@@ -91,7 +91,7 @@ describe("SandboxRunner — isolation", () => {
     ).rejects.toThrow();
   });
 
-  it("freezes the unierp global so an extension cannot replace a capability", async () => {
+  it("T05 — freezes the unierp global so an extension cannot replace a capability", async () => {
     const { result } = await runner.run(
       `const hooks = { tamper: () => {
          try { globalThis.unierp = { log: () => "hijacked" }; } catch (e) { return "blocked"; }
@@ -133,7 +133,7 @@ describe("SandboxRunner — capabilities", () => {
     expect(host.dataRead).not.toHaveBeenCalled();
   });
 
-  it("re-checks the scope on the host side, not only in the isolate", async () => {
+  it("T03 — re-checks the scope on the host side, not only in the isolate", async () => {
     // Even if an extension reached the bridge directly, the host branch checks
     // the scope again — the capability object is not the authority.
     const host = hostSpy();
@@ -149,7 +149,7 @@ describe("SandboxRunner — capabilities", () => {
     expect(host.dataWrite).not.toHaveBeenCalled();
   });
 
-  it("never lets the isolate choose its own tenant", async () => {
+  it("T09a — never lets the isolate choose its own tenant", async () => {
     const seen: string[] = [];
     const host: HostCapabilities = {
       log: (_l, meta) => seen.push(meta.tenantId),
@@ -166,7 +166,7 @@ describe("SandboxRunner — capabilities", () => {
 });
 
 describe("SandboxRunner — governance", () => {
-  it("caps queries per invocation", async () => {
+  it("T06 — caps queries per invocation", async () => {
     const runner = new SandboxRunner();
     const host: HostCapabilities = {
       log: () => {},
@@ -182,7 +182,7 @@ describe("SandboxRunner — governance", () => {
     ).rejects.toThrow();
   });
 
-  it("denies egress to a host that was not approved at install time", async () => {
+  it("T07 — denies egress to a host that was not approved at install time", async () => {
     const runner = new SandboxRunner();
     const host: HostCapabilities = {
       log: () => {},
@@ -199,8 +199,8 @@ describe("SandboxRunner — governance", () => {
     expect(host.httpFetch).not.toHaveBeenCalled();
   });
 
-  it("allows egress to an approved host", async () => {
-    const runner = new SandboxRunner();
+  it("T07 — allows egress to an approved host", async () => {
+    const runner = new SandboxRunner({ resolver: async () => ["8.8.8.8"] });
     const host: HostCapabilities = {
       log: () => {},
       httpFetch: async () => ({ status: 200 }),
@@ -214,15 +214,15 @@ describe("SandboxRunner — governance", () => {
     expect(result).toEqual({ status: 200 });
   });
 
-  it("fails closed once the kill switch is thrown", async () => {
+  it("T10a — fails closed once the kill switch is thrown", async () => {
     const runner = new SandboxRunner();
-    runner.disable("acme-widget");
+    await runner.disable("acme-widget");
     await expect(
       runner.run(`const hooks = { go: () => 1 };`, install(), hostSpy(), {
         hook: "go",
       }),
     ).rejects.toThrow(SandboxDisabledError);
-    runner.enable("acme-widget");
+    await runner.enable("acme-widget");
     const { result } = await runner.run(
       `const hooks = { go: () => 1 };`,
       install(),
@@ -239,7 +239,7 @@ describe("SandboxRunner — governance", () => {
       dataRead: async () => ({}),
     };
     const { usage } = await runner.run(
-      `const hooks = { go: () => { unierp.data.read("A", {}); unierp.data.read("B", {}); } };`,
+      `const hooks = { go: () => { for (let i = 0; i < 1e6; i++) Math.sqrt(i); unierp.data.read("A", {}); unierp.data.read("B", {}); return 1; } };`,
       install({ scopes: ["data:read"] }),
       host,
       { hook: "go" },

@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
+    "test:hardening": "vitest run src/hardening.spec.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/"
   },
