@@ -12,6 +12,7 @@
   "exclude": [
     "node_modules",
     "dist",
+    "src/.escape-mutated",
     "**/*.spec.ts",
     "**/*.spec.tsx",
     "**/*.test.ts",

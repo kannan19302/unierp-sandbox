@@ -24,3 +24,10 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
         if: hashFiles('tsconfig.json') != ''
+
+      # A18 — the escape suite is a HARD gate. No `if: hashFiles(...)` guard:
+      # a required step that runs only when a script exists is D013 — a gate
+      # that passes by being absent. Each test provably fails when its
+      # mitigation is removed (see src/escape-suite.spec.ts).
+      - name: Escape suite (A18)
+        run: npm run test:escape

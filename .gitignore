@@ -39,6 +39,7 @@ Thumbs.db
 *.bak
 *.orig
 scratch/
+src/.escape-mutated/
 
 # Storybook
 storybook-static/
