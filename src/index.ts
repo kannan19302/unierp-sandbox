@@ -96,6 +96,51 @@ export interface SandboxInstallation {
   hardening?: Partial<SandboxHardening>;
   /** Hosts approved at install time. A declared-but-unapproved host is denied. */
   approvedHosts?: readonly string[];
+  /**
+   * A19 — the governor: per-TENANT budgets aggregated across every extension
+   * the tenant runs, over a rolling window. Per-invocation budgets (budget.*)
+   * gate one call; these gate the tenant as a whole. Absent, only the
+   * per-invocation budgets apply.
+   */
+  tenantBudget?: Partial<TenantBudget>;
+}
+
+/**
+ * A19 — per-tenant aggregate budgets, the Salesforce governor-limit analogue.
+ * These sum across every extension a tenant runs within one window, so a single
+ * abusive extension cannot burn the platform and a single tenant cannot burn
+ * more than its window.
+ */
+export interface TenantBudget {
+  /** Window length in ms; all budgets reset when it rolls over. */
+  windowMs: number;
+  /** Total real CPU (ms) the tenant may burn across all its code in a window. */
+  cpuMsPerWindow: number;
+  /** Total wall-clock (ms) across the tenant's invocations in a window. */
+  wallMsPerWindow: number;
+  /** Total database queries the tenant may issue in a window. */
+  queriesPerWindow: number;
+  /** Total rows the tenant may read or write in a window. */
+  rowsPerWindow: number;
+  /** Total egress bytes (outbound HTTP request+response) in a window. */
+  egressBytesPerWindow: number;
+}
+
+/** A19 — one budget the tenant was cut off on. `at` is an ISO timestamp. */
+export interface GovernorEvent {
+  tenantId: string;
+  extensionId: string;
+  budget:
+    | "cpuMsPerWindow"
+    | "wallMsPerWindow"
+    | "queriesPerWindow"
+    | "rowsPerWindow"
+    | "egressBytesPerWindow";
+  /** The budget value that was exceeded. */
+  limit: number;
+  /** The tenant's cumulative consumption when it was cut off. */
+  used: number;
+  at: string;
 }
 
 /**
@@ -199,6 +244,8 @@ export interface SandboxRunnerOptions {
   cpuWindowMs?: number;
   /** T19 — shared in-flight isolate accounting. Defaults to a process-wide registry. */
   concurrencyRegistry?: ConcurrencyRegistry;
+  /** A19 — receive a GovernorEvent whenever a tenant is cut off on a budget. */
+  onGovernorEvent?: (event: GovernorEvent) => void;
 }
 
 export interface InvocationUsage {
@@ -218,6 +265,7 @@ export class SandboxScopeError extends Error {
         `the installing admin's own permissions — an extension can never exceed its installer.`,
     );
     this.name = "SandboxScopeError";
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -227,6 +275,7 @@ export class SandboxQuotaError extends Error {
       `Extension "${extensionId}" exceeded its ${what} budget of ${limit}.`,
     );
     this.name = "SandboxQuotaError";
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -236,6 +285,7 @@ export class SandboxDisabledError extends Error {
       `Extension "${extensionId}" is disabled by the platform kill switch.`,
     );
     this.name = "SandboxDisabledError";
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
@@ -254,6 +304,23 @@ const HARDENING_RANGES: Record<keyof SandboxHardening, readonly [number, number]
   maxConcurrentIsolatesPerTenant: [1, 100],
   maxConcurrentIsolatesPerProcess: [1, 200],
 };
+
+const TENANT_DEFAULTS: Required<TenantBudget> = {
+  windowMs: 60_000,
+  cpuMsPerWindow: 5_000,
+  wallMsPerWindow: 60_000,
+  queriesPerWindow: 10_000,
+  rowsPerWindow: 100_000,
+  egressBytesPerWindow: 10_485_760,
+};
+
+function resolveTenantBudget(partial?: Partial<TenantBudget>): TenantBudget {
+  const out = { ...TENANT_DEFAULTS, ...partial } as Record<keyof TenantBudget, number>;
+  for (const key of Object.keys(out) as (keyof TenantBudget)[]) {
+    if (!Number.isFinite(out[key]) || out[key] <= 0) out[key] = TENANT_DEFAULTS[key];
+  }
+  return out;
+}
 
 function resolveHardening(partial?: Partial<SandboxHardening>): SandboxHardening {
   const out = { ...HARDENING_DEFAULTS, ...partial } as Record<
@@ -420,11 +487,14 @@ export class SandboxRunner {
   private readonly resolver: EgressResolver;
   private readonly cpuWindowMs: number;
   private readonly registry: ConcurrencyRegistry;
+  private readonly onGovernorEvent: (event: GovernorEvent) => void;
 
   /** T15 — automatic breaker state, SEPARATE from the operator kill switch. */
   private breached = new Set<string>();
   /** T15 — per-extension CPU accounting window. */
   private cpuWindow = new Map<string, { windowStart: number; cpuMs: number }>();
+  /** A19 — per-tenant aggregate windows, keyed by tenantId. */
+  private tenantWindow = new Map<string, { windowStart: number; used: Record<Exclude<keyof TenantBudget, "windowMs">, number> }>();
 
   constructor(options: SandboxRunnerOptions = {}) {
     this.revocationStore =
@@ -432,6 +502,7 @@ export class SandboxRunner {
     this.resolver = options.resolver ?? defaultResolver;
     this.cpuWindowMs = options.cpuWindowMs ?? 60_000;
     this.registry = options.concurrencyRegistry ?? new ConcurrencyRegistry();
+    this.onGovernorEvent = options.onGovernorEvent ?? (() => undefined);
   }
 
   /** T12/T16 — platform kill switch (§ 8.3). Subsequent invocations fail closed. */
@@ -600,7 +671,8 @@ export class SandboxRunner {
           }
           // T15 — CPU is charged during execution at every host hop, so a
           // budget of 100 ms cannot be silently exceeded across a single call.
-          accrueCpu();
+          const deltaCpu = accrueCpu();
+          this.chargeTenant(tenantId, extensionId, "cpuMsPerWindow", deltaCpu, installation.tenantBudget);
           if (usage.cpuMs >= remainingCpuMs) {
             throw new SandboxQuotaError(
               "CPU-per-minute during execution",
@@ -628,13 +700,16 @@ export class SandboxRunner {
                 budget.queriesPerInvocation,
                 extensionId,
               );
+              this.chargeTenant(tenantId, extensionId, "queriesPerWindow", 1, installation.tenantBudget);
               assertTakeWithin(args[1], hardening, extensionId);
               if (!host.dataRead)
                 throw new Error(
                   "data:read is granted but no host reader is wired",
                 );
               const result = (await host.dataRead(String(args[0]), args[1])) ?? null;
+              const rCount = countRows(result);
               this.chargeRows(usage, result, hardening, extensionId);
+              this.chargeTenant(tenantId, extensionId, "rowsPerWindow", rCount, installation.tenantBudget);
               return capBridge(
                 JSON.stringify(result),
                 hardening,
@@ -649,6 +724,7 @@ export class SandboxRunner {
                 budget.queriesPerInvocation,
                 extensionId,
               );
+              this.chargeTenant(tenantId, extensionId, "queriesPerWindow", 1, installation.tenantBudget);
               if (!host.dataWrite)
                 throw new Error(
                   "data:write is granted but no host writer is wired",
@@ -659,7 +735,9 @@ export class SandboxRunner {
                   String(args[1]),
                   args[2],
                 )) ?? null;
+              const rCount = countRows(result);
               this.chargeRows(usage, result, hardening, extensionId);
+              this.chargeTenant(tenantId, extensionId, "rowsPerWindow", rCount, installation.tenantBudget);
               return capBridge(
                 JSON.stringify(result),
                 hardening,
@@ -691,8 +769,11 @@ export class SandboxRunner {
                     `Redirects are not permitted on the egress path.`,
                 );
               }
+              const respJson = JSON.stringify(response);
+              const respBytes = byteLength(respJson);
+              this.chargeTenant(tenantId, extensionId, "egressBytesPerWindow", respBytes, installation.tenantBudget);
               return capBridge(
-                JSON.stringify(response),
+                respJson,
                 hardening,
                 extensionId,
               );
@@ -748,6 +829,14 @@ export class SandboxRunner {
       this.chargeCpu(extensionId, usage.cpuMs, budget);
 
       return { result: resultValue, usage };
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        const m = err.message.match(/^Extension "([^"]+)" exceeded its (.+) budget of (\d+(?:\.\d+)?)\.$/);
+        if (m) {
+          throw new SandboxQuotaError(m[2], Number(m[3]), m[1]);
+        }
+      }
+      throw err;
     } finally {
       // T19 — always release the slot, including on timeout or escape attempt.
       this.registry.release(tenantId);
@@ -816,6 +905,55 @@ export class SandboxRunner {
         budget.cpuMsPerMinute,
         extensionId,
       );
+    }
+  }
+
+  /** A19 — per-tenant budget enforcement and governor event auditing. */
+  private assertTenantWindow(
+    tenantId: string,
+    extensionId: string,
+    tenantBudget?: Partial<TenantBudget>,
+  ): TenantBudget {
+    const budget = resolveTenantBudget(tenantBudget);
+    const now = Date.now();
+    let tw = this.tenantWindow.get(tenantId);
+    if (!tw || now - tw.windowStart >= budget.windowMs) {
+      tw = {
+        windowStart: now,
+        used: {
+          cpuMsPerWindow: 0,
+          wallMsPerWindow: 0,
+          queriesPerWindow: 0,
+          rowsPerWindow: 0,
+          egressBytesPerWindow: 0,
+        },
+      };
+      this.tenantWindow.set(tenantId, tw);
+    }
+    return budget;
+  }
+
+  private chargeTenant(
+    tenantId: string,
+    extensionId: string,
+    field: Exclude<keyof TenantBudget, "windowMs">,
+    amount: number,
+    tenantBudget?: Partial<TenantBudget>,
+  ): void {
+    const budget = this.assertTenantWindow(tenantId, extensionId, tenantBudget);
+    const tw = this.tenantWindow.get(tenantId)!;
+    tw.used[field] += amount;
+    const limit = budget[field];
+    if (tw.used[field] > limit) {
+      this.onGovernorEvent({
+        tenantId,
+        extensionId,
+        budget: field,
+        limit,
+        used: tw.used[field],
+        at: new Date().toISOString(),
+      });
+      throw new SandboxQuotaError(`tenant ${field}`, limit, extensionId);
     }
   }
 
