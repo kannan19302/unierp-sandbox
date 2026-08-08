@@ -1,4 +1,4 @@
-# THREAT MODEL — `@unerp/sandbox`
+# THREAT MODEL — `@kannan19302/sandbox`
 
 > **Phase A16.** Established 2026-08-07 · Amended, never replaced.
 >

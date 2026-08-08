@@ -266,7 +266,7 @@ describe("error types", () => {
 
 describe("effective scopes", () => {
   it("intersects the manifest request with the installer's own permissions", async () => {
-    const { effectiveScopes } = await import("@unerp/extension-api");
+    const { effectiveScopes } = await import("@kannan19302/extension-api");
     expect(effectiveScopes(["data:read", "data:write"], ["data:read"])).toEqual(
       ["data:read"],
     );

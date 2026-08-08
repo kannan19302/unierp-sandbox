@@ -4,7 +4,7 @@ import {
   type ResourceBudget,
   ResourceBudgetSchema,
   type Scope,
-} from "@unerp/extension-api";
+} from "@kannan19302/extension-api";
 
 /**
  * Tier-3 extension sandbox — PLATFORM_ARCHITECTURE.md § 8.3, TRD ADR-009.
