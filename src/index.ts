@@ -258,6 +258,19 @@ export interface InvocationUsage {
 }
 
 export class SandboxScopeError extends Error {
+  /**
+   * G02 exit criterion: "An extension attempting an undeclared operation
+   * is denied and the attempt is audited." Denial already worked
+   * (requireScope throws this class); the caller (ExtensionRegistryService
+   * .recordUsage) only ever stored `error.name` — a generic
+   * "SandboxScopeError" string with no indication of WHICH capability was
+   * attempted. Exposing `scope` as a real property lets the caller build
+   * an audit record specific enough to act on, instead of "some scope
+   * violation happened, no further detail."
+   */
+  readonly scope: Scope;
+  readonly extensionId: string;
+
   constructor(scope: Scope, extensionId: string) {
     super(
       `Extension "${extensionId}" called a capability requiring scope "${scope}", which its ` +
@@ -265,6 +278,8 @@ export class SandboxScopeError extends Error {
         `the installing admin's own permissions — an extension can never exceed its installer.`,
     );
     this.name = "SandboxScopeError";
+    this.scope = scope;
+    this.extensionId = extensionId;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

@@ -257,6 +257,12 @@ describe("error types", () => {
     expect(e.message).toContain("acme-widget");
   });
 
+  it("G02: exposes scope and extensionId as real properties, not just embedded in the message string, so a caller can build a specific audit record", () => {
+    const e = new SandboxScopeError("http:fetch", "acme-widget");
+    expect(e.scope).toBe("http:fetch");
+    expect(e.extensionId).toBe("acme-widget");
+  });
+
   it("names the budget and the limit on a quota breach", () => {
     const e = new SandboxQuotaError("per-invocation query", 50, "acme-widget");
     expect(e.name).toBe("SandboxQuotaError");
