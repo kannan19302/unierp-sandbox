@@ -8,7 +8,7 @@ on:
 
 jobs:
   publish:
-    uses: kannan19302/unierp-workspace/.github/workflows/publish-library.yml@main
+    uses: kannan19302/unierp-workspace/.github/workflows/publish-library.yml@0bb9682d45d50e23e6de344d71f10ec1a909bf04
     permissions:
       contents: read
       id-token: write
