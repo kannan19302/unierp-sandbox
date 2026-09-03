@@ -847,7 +847,7 @@ export class SandboxRunner {
     } catch (err: unknown) {
       if (err instanceof Error) {
         const m = err.message.match(/^Extension "([^"]+)" exceeded its (.+) budget of (\d+(?:\.\d+)?)\.$/);
-        if (m) {
+        if (m && m[1] && m[2] && m[3]) {
           throw new SandboxQuotaError(m[2], Number(m[3]), m[1]);
         }
       }
@@ -926,7 +926,7 @@ export class SandboxRunner {
   /** A19 — per-tenant budget enforcement and governor event auditing. */
   private assertTenantWindow(
     tenantId: string,
-    extensionId: string,
+    _extensionId: string,
     tenantBudget?: Partial<TenantBudget>,
   ): TenantBudget {
     const budget = resolveTenantBudget(tenantBudget);
